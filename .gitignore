@@ -1,0 +1,4 @@
+debian/files
+debian/seamless
+debian/seamless.*debhelper*
+debian/seamless.substvars
