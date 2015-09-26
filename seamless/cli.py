@@ -2,11 +2,13 @@ import functools
 import getpass
 import grp
 import logging
-import subprocess
 import os
+import random
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
-import random
 
 import click
 
@@ -16,6 +18,8 @@ from seamless.signer import Signer
 logger = logging.getLogger(__name__)
 LOG_FILE_PATH = '/var/log/seamless/seamless.log'
 USER_GROUP = 'seamless'
+
+key_file_format_re = re.compile(r'^(?P<algo>ssh-\w+)\s+(?P<key>\S+)\s+(?P<user>\S+)\s*')
 
 
 def system_setup():
@@ -62,18 +66,18 @@ class Scope(object):
     def init(self, secret=None):
         system_setup()
         print("creating user {}, home={}".format(self.name, self.path))
-        subprocess.check_output('useradd {name} --create-home --skel {skel} --comment "seamless user"'.format(
+        subprocess.check_output('useradd {name} --create-home --skel {skel} --comment "seamless user" --groups {group}'.format(
             name=self.name,
             skel=tempfile.mkdtemp(),
+            group=USER_GROUP,
         ), shell=True)
-        ssh_dir = os.path.join(self.path, '.ssh')
-        os.mkdir(ssh_dir)
-        os.mkdir(self.key_dir)
         if not secret:
             secret = '%x' % random.getrandbits(256)
         with open(self.secret_file, 'w') as f:
             f.write(secret.strip())
         subprocess.check_output("""
+            mkdir {ssh_dir};
+            mkdir {key_dir};
             touch {key_file};
             chown -R {user}:{user} {home_dir};
             chmod 400 {secret_file};
@@ -83,32 +87,51 @@ class Scope(object):
             secret_file=self.secret_file,
             key_file=self.authorized_keys_file,
             home_dir=self.path,
-            ssh_dir=ssh_dir,
+            ssh_dir=os.path.join(self.path, '.ssh'),
+            key_dir=self.key_dir,
         ), shell=True)
 
-    @property
-    def signer(self):
+    def delete(self):
+        group = grp.getgrnam(USER_GROUP)
+        if self.name not in group.gr_mem:
+            print("{} is not a member of group {}, aborting.".format(self.name, USER_GROUP))
+            return
+        subprocess.check_output('deluser {name} --remove-home'.format(self.name))
+
+    def get_secret(self):
         with open(self.secret_file, 'r') as f:
-            return Signer(f.read())
+            return f.read()
 
     def get_token(self, username):
-        return self.signer.sign(username)
+        return Signer(self.get_secret()).sign(username)
+
+    def add(self, keyfile, username=None):
+        if not username:
+            username = os.path.basename(keyfile)
+        shutil.copyfile(keyfile, os.path.join(self.key_dir, username))
+
+    def remove(self, username):
+        raise NotImplementedError()
 
     def sync(self):
         lines = []
         for filename in os.listdir(self.key_dir):
-            print filename
-            if not filename.endswith('.pub'):
+            if filename.startswith('.'):
                 continue
-            user = filename[:-4]
             path = os.path.join(self.key_dir, filename)
-            command = '{python} -m seamless.cli token {name} --user {user}'.format(python=sys.executable, name=self.name, user=user)
+            command = '{python} -m seamless.cli token {name} --user {user}'.format(python=sys.executable, name=self.name, user=filename)
             with open(path, 'r') as f:
                 key = f.read()
+                match = key_file_format_re.match(key)
+                if not match:
+                    print('{} does not look like a valid ssh key, skipping.'.format(path))
+                    continue
+                key = '{algo} {key} {user}'.format(**match.groupdict())
+                print("found key for {}".format(filename))
                 lines.append('command="{command}",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty {key}\n'.format(
                     command=command,
                     key=key.strip(),
-                    user=user,
+                    user=filename,
                 ))
 
         with open(self.authorized_keys_file, 'w') as f:
@@ -131,9 +154,11 @@ def require_root(cmd):
 @click.group()
 def main():
     if os.path.exists(LOG_FILE_PATH):
-        logger.addHandler(logging.FileHandler(LOG_FILE_PATH))
+        handler = logging.FileHandler(LOG_FILE_PATH)
+        handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        logger.addHandler(handler)
         logger.setLevel(logging.INFO)
-    logger.info('main: %s', ' '.join(sys.argv))
+    logger.info(' '.join(sys.argv))
 
 
 @main.command()
@@ -142,7 +167,7 @@ def main():
 @require_root
 def init(name, secret):
     scope = Scope(name)
-    scope.init()
+    scope.init(secret=secret)
 
 
 @main.command()
@@ -163,6 +188,35 @@ def token(name, user):
 def sync(name):
     scope = Scope(name)
     scope.sync()
+
+
+@main.command()
+@click.argument('name')
+@click.argument('keyfile')
+@click.option('--user')
+@require_root
+def add(name, keyfile, user):
+    scope = Scope(name)
+    scope.add(keyfile, user)
+    scope.sync()
+
+
+@main.command()
+@click.argument('name')
+@click.argument('user')
+@require_root
+def remove(name, user):
+    scope = Scope(name)
+    scope.remove(user)
+    scope.sync()
+
+
+@main.command()
+@click.argument('name')
+@require_root
+def delete(name):
+    scope = Scope(name)
+    scope.delete()
 
 
 if __name__ == '__main__':
