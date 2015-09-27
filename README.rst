@@ -29,8 +29,8 @@ Installation
 
 From a deb package::
 
-    $ wget https://github.com/emulbreh/seamless/releases/files/.deb
-    $ sudo dpkg -i .deb
+    $ wget https://github.com/emulbreh/seamless/releases/download/v0.1.0/seamless_0.1.0_amd64.deb
+    $ sudo dpkg -i seamless_0.1.0_amd64.deb
 
 As Python package::
 
