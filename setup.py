@@ -9,7 +9,7 @@ with open('README.rst') as f:
 setup(
     name='seamless',
     url='http://github.com/emulbreh/seamless/',
-    version='0.1.0-dev',
+    version='0.1.0',
     packages=find_packages(),
     license=u'BSD',
     author=u'Johannes Dollinger',

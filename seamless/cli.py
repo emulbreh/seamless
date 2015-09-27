@@ -151,7 +151,14 @@ def require_root(cmd):
     return wrapped_command
 
 
+def print_version(ctx, param, value):
+    from seamless import __version__
+    print(__version__)
+    ctx.exit()
+
+
 @click.group()
+@click.option('--version', is_flag=True, is_eager=True, expose_value=False, callback=print_version)
 def main():
     if os.path.exists(LOG_FILE_PATH):
         handler = logging.FileHandler(LOG_FILE_PATH)
