@@ -1,6 +1,6 @@
 import subprocess
 
-__version__ = '0.1.0'
+__version__ = '0.1.0-dev'
 
 
 class AuthenticationError(Exception):
@@ -11,6 +11,6 @@ class AuthenticationError(Exception):
 
 def get_token(ssh):
     try:
-        return subprocess.check_output('ssh {} -'.format(ssh), shell=True).strip()
+        return subprocess.check_output('ssh -T {}'.format(ssh), shell=True).strip()
     except subprocess.CalledProcessError as e:
         raise AuthenticationError(e)
