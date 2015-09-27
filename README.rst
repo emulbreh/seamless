@@ -12,7 +12,7 @@ The authentication flow is as follows:
   .. code::
 
       $ ssh -T seamless-realm@seamless-host
-      seamless-user.VgfAwA.v-xKIZh3qYawqcm2RRh4q-LPfVE
+      username.VgfAwA.v-xKIZh3qYawqcm2RRh4q-LPfVE
 
 * The client sends the obtained token in the HTTP *Authorization* header of its requests to `protected-app`.
   The app uses the shared secret to validate the token.
@@ -21,7 +21,7 @@ The authentication flow is as follows:
 
      GET / HTTP/1.1
      Host: protected-app
-     Authorization: seamless seamless-user.VgfAwA.v-xKIZh3qYawqcm2RRh4q-LPfVE
+     Authorization: seamless username.VgfAwA.v-xKIZh3qYawqcm2RRh4q-LPfVE
 
 
 Installation
