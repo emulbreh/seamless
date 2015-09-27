@@ -1,32 +1,66 @@
 seamless
 ========
 
-ssh authentication for web services
+seamless provides an easy way to obtain an https session token via ssh.
+It automates creation of user accounts and manages their *authorized_keys* as well as session token creation via forced ssh commands.
+The authentication flow is as follows:
+
+* A client connects to `seamless-realm@seamless-host` via ssh and authenticates with a public key.
+  The key is restricted to only execute the token creation command of the seamless binary.
+  The seamless command returns session token that is signed with a secret specific to `seamless-realm`.
+
+  .. code::
+
+      $ ssh -T seamless-realm@seamless-host
+      seamless-user.VgfAwA.v-xKIZh3qYawqcm2RRh4q-LPfVE
+
+* The client sends the obtained token in the HTTP *Authorization* header of its requests to `protected-app`.
+  The app uses the shared secret to validate the token.
+
+  .. code:: http
+
+     GET / HTTP/1.1
+     Host: protected-app
+     Authorization: seamless seamless-user.VgfAwA.v-xKIZh3qYawqcm2RRh4q-LPfVE
 
 
-Setting up a seamless user
+Installation
+-------------
+
+From a deb package::
+
+    $ wget https://github.com/emulbreh/seamless/releases/files/.deb
+    $ sudo dpkg -i .deb
+
+As Python package::
+
+    $ pip install seamless
+
+
+Setting up a seamless realm
 ---------------------------
 
-First, you have to create a user for seamless, and add keys that are allowed to get tokens via seamless (on ``seamless-host``):
+A seamless realm is a user account on `seamless-host`. The creation and management of *authorized_keys* of these accounts is handled by seamless.
 
 .. code:: bash
 
-    $ sudo seamless init ${NAME}
-    $ sudo seamless add ${NAME} /path/to/public/key --user ${USER}
+    $ sudo seamless init seamless-realm
+    $ sudo seamless add seamless-realm /path/to/public/key --user username
 
 A user with this public key is now able to get tokens via ssh:
 
 .. code::
 
-    $ ssh ${NAME}@seamless-host -
+    $ ssh -T seamless-realm@seamless-host
+    username.VgfOLQ.EB6NTfXiyv7dWSKUMQJ38JXa5aw
 
 or from Python
 
 .. code:: python
 
-    import seamless
-    
-    seamless.get_token('name@seamless-host')
+    >>> import seamless
+    >>> seamless.get_token('seamless-realm@seamless-host')
+    'username.VgfOBA.dRBDY5EUmQvhB8OnqPDWlC1tml4'
 
 
 Protecting a webservice with WSGI middleware
@@ -41,6 +75,9 @@ seamless ships with WSGI middleware that verifies that a valid seamless token is
     app = ...
 
     app = SeamlessMiddleware(app, max_age=60, secret='...')
+
+
+Requests without a valid *Authorization* header will be rejected with a 401 response.
 
 
 Making requests to such a protected app is made easy with an auth plugin for `requests`_:
@@ -58,6 +95,12 @@ Making requests to such a protected app is made easy with an auth plugin for `re
 
 The token obtained from `seamless-host` is cached. 
 It will be be automatically refreshed when it expires, and the failing request retried.
+
+
+Caveats
+--------
+
+* If token validation is performed on a different host than token creation, clock skew may result in tokens that expire too early or too late.
 
 
 .. _requests: http://docs.python-requests.org/
