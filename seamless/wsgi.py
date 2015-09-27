@@ -23,10 +23,11 @@ class SeamlessMiddleware(object):
             return self._not_authorized(environ, start_response, 'bad authorization header format\n')
         token = auth.split(' ', 1)[1]
         try:
-            self.signer.unsign(token, max_age=self.max_age)
+            user = self.signer.unsign(token, max_age=self.max_age)
         except itsdangerous.SignatureExpired as e:
             return self._not_authorized(environ, start_response, 'token expired\n')
         except itsdangerous.BadData as e:
             print e
             return self._not_authorized(environ, start_response, 'invalid token\n')
+        environ['HTTP_X_SEAMLESS_USER'] = user
         return self.app(environ, start_response)
